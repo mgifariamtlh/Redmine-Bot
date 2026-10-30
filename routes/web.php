@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DeploymentController;
+use App\Http\Controllers\SettingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -9,6 +12,16 @@ use Illuminate\Support\Facades\Route;
 | Data di bawah masih dummy. Nantinya dipindah ke Controller dan diambil
 | dari database / Redmine API.
 */
+
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
+});
+
+Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+
+// Semua halaman menu di bawah ini hanya bisa diakses setelah login.
+Route::middleware('auth')->group(function () {
 
 Route::get('/', function () {
     $stats = [
@@ -50,3 +63,13 @@ Route::get('/users', function () {
 
     return view('users.index', compact('users'));
 })->name('users.index');
+
+Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
+Route::post('/deployments/sync', [DeploymentController::class, 'sync'])->name('deployments.sync');
+Route::post('/deployments/{issueId}/notify', [DeploymentController::class, 'notify'])->whereNumber('issueId')->name('deployments.notify');
+
+Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+Route::put('/settings/integration', [SettingController::class, 'updateIntegration'])->name('settings.integration');
+Route::put('/settings/scheduler', [SettingController::class, 'updateScheduler'])->name('settings.scheduler');
+
+});

@@ -16,9 +16,8 @@
     <style>
         :root {
             --sidebar-width: 250px;
-            --sidebar-bg: #1e2433;
-            --sidebar-hover: #2a3246;
-            --sidebar-text: #aab2c5;
+            --sidebar-hover: rgba(255, 255, 255, .08);
+            --sidebar-text: #aab2c9;
             --brand-color: #0d6efd;
             --body-bg: #f4f6fb;
         }
@@ -32,8 +31,38 @@
         /* ---------- Sidebar ---------- */
         .sidebar {
             width: var(--sidebar-width);
-            background: var(--sidebar-bg);
+            background: linear-gradient(165deg, #131a3d 0%, #1c2461 45%, #2a1f5e 100%);
             color: var(--sidebar-text);
+            overflow: hidden;
+        }
+
+        .sidebar::before {
+            content: '';
+            position: absolute;
+            top: -90px;
+            right: -70px;
+            width: 240px;
+            height: 240px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(13, 110, 253, .4), transparent 70%);
+            pointer-events: none;
+        }
+
+        .sidebar::after {
+            content: '';
+            position: absolute;
+            bottom: -100px;
+            left: -60px;
+            width: 240px;
+            height: 240px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(232, 65, 60, .3), transparent 70%);
+            pointer-events: none;
+        }
+
+        .sidebar > * {
+            position: relative;
+            z-index: 1;
         }
 
         @media (min-width: 992px) {
@@ -179,7 +208,8 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link">
+                    <a href="{{ route('deployments.index') }}"
+                       class="nav-link {{ request()->routeIs('deployments.*') ? 'active' : '' }}">
                         <i class="fa-solid fa-calendar-check"></i> Jadwal Deploy
                     </a>
                 </li>
@@ -188,7 +218,8 @@
             <div class="menu-label px-2 mb-2 mt-4">Sistem</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a href="#" class="nav-link">
+                    <a href="{{ route('settings.index') }}"
+                       class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
                         <i class="fa-solid fa-gear"></i> Settings
                     </a>
                 </li>
@@ -223,18 +254,25 @@
                     <a href="#" class="d-flex align-items-center gap-2 text-decoration-none text-dark dropdown-toggle"
                        data-bs-toggle="dropdown" aria-expanded="false">
                         <span class="avatar rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-semibold">
-                            AD
+                            {{ strtoupper(mb_substr(auth()->user()->name ?? 'AD', 0, 2)) }}
                         </span>
                         <span class="d-none d-md-block lh-sm">
-                            <span class="d-block fw-semibold">Administrator</span>
+                            <span class="d-block fw-semibold">{{ auth()->user()->name ?? 'Administrator' }}</span>
                             <small class="text-muted">Super Admin</small>
                         </span>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                         <li><a class="dropdown-item" href="#"><i class="fa-regular fa-user me-2"></i>Profil</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fa-solid fa-gear me-2"></i>Settings</a></li>
+                        <li><a class="dropdown-item" href="{{ route('settings.index') }}"><i class="fa-solid fa-gear me-2"></i>Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="#"><i class="fa-solid fa-right-from-bracket me-2"></i>Logout</a></li>
+                        <li>
+                            <form action="{{ route('logout') }}" method="POST">
+                                @csrf
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <i class="fa-solid fa-right-from-bracket me-2"></i>Logout
+                                </button>
+                            </form>
+                        </li>
                     </ul>
                 </div>
             </div>
