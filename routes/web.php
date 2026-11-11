@@ -61,7 +61,6 @@ Route::post('/deployments/sync', [DeploymentController::class, 'sync'])->name('d
 Route::post('/deployments/{issueId}/notify', [DeploymentController::class, 'notify'])->whereNumber('issueId')->name('deployments.notify');
 
 Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
-Route::put('/settings/integration', [SettingController::class, 'updateIntegration'])->name('settings.integration');
-Route::put('/settings/scheduler', [SettingController::class, 'updateScheduler'])->name('settings.scheduler');
+Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
 
 });

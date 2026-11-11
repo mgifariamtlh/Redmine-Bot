@@ -34,81 +34,82 @@
         </div>
     @endif
 
-    <div class="row g-4">
-        {{-- Card 1: Konfigurasi API & Integrasi --}}
-        <div class="col-lg-7">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-plug text-primary me-2"></i>Konfigurasi API &amp; Integrasi</h3>
-                </div>
-                <form action="{{ route('settings.integration') }}" method="POST" class="d-flex flex-column flex-grow-1">
-                    @csrf
-                    @method('PUT')
+    <form action="{{ route('settings.update') }}" method="POST">
+        @csrf
+        @method('PUT')
+        <div class="row g-4">
+            {{-- Card 1: Konfigurasi API & Integrasi --}}
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-plug text-primary me-2"></i>Konfigurasi API &amp; Integrasi</h3>
+                    </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label for="redmine_url" class="form-label fw-medium">Redmine Base URL</label>
+                            <label for="redmine_base_url" class="form-label fw-medium">Redmine Base URL</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="fa-solid fa-link"></i></span>
-                                <input type="url" class="form-control" id="redmine_url" name="redmine_url"
-                                       value="{{ old('redmine_url', $settings['redmine_url']) }}"
+                                <input type="url" class="form-control" id="redmine_base_url" name="redmine_base_url"
+                                       value="{{ old('redmine_base_url', $settings['redmine_base_url']) }}"
                                        placeholder="https://redmine.example.com" required>
                             </div>
                         </div>
+                        <div class="mb-3">
+                            <label for="redmine_api_key" class="form-label fw-medium">Redmine API Key</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fa-solid fa-key"></i></span>
+                                <input type="password" class="form-control" id="redmine_api_key" name="redmine_api_key"
+                                       placeholder="{{ $settings['has_api_key'] ? 'Tersimpan — kosongkan jika tidak diubah' : 'Masukkan API Key' }}"
+                                       autocomplete="new-password">
+                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="redmine_api_key" title="Tampilkan">
+                                    <i class="fa-regular fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                API Key akun Redmine (role User) yang dapat melihat task rekan tim. Redmine &rarr; My Account &rarr; API access key.
+                            </div>
+                        </div>
                         <div class="mb-1">
-                            <label for="telegram_token" class="form-label fw-medium">Telegram Bot Token</label>
+                            <label for="telegram_bot_token" class="form-label fw-medium">Telegram Bot Token</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="fa-brands fa-telegram"></i></span>
-                                <input type="password" class="form-control" id="telegram_token" name="telegram_token"
-                                       value="{{ old('telegram_token', $settings['telegram_token']) }}"
-                                       placeholder="123456789:ABCdefGhIJKlmNoPQRstuVWxyZ" autocomplete="off">
-                                <button class="btn btn-outline-secondary" type="button" id="toggleToken" title="Tampilkan">
+                                <input type="password" class="form-control" id="telegram_bot_token" name="telegram_bot_token"
+                                       placeholder="{{ $settings['has_bot_token'] ? 'Tersimpan — kosongkan jika tidak diubah' : '123456789:ABCdefGhIJKlmNoPQRstuVWxyZ' }}"
+                                       autocomplete="new-password">
+                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="telegram_bot_token" title="Tampilkan">
                                     <i class="fa-regular fa-eye"></i>
                                 </button>
                             </div>
                             <div class="form-text">Dapatkan token dari @BotFather di Telegram.</div>
                         </div>
                     </div>
-                    <div class="card-footer bg-white text-end mt-auto">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fa-solid fa-floppy-disk me-1"></i> Simpan
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        {{-- Card 2: Pengaturan Scheduler --}}
-        <div class="col-lg-5">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-clock text-primary me-2"></i>Pengaturan Scheduler</h3>
                 </div>
-                <form action="{{ route('settings.scheduler') }}" method="POST" class="d-flex flex-column flex-grow-1">
-                    @csrf
-                    @method('PUT')
+            </div>
+
+            {{-- Card 2: Pengaturan Scheduler --}}
+            <div class="col-lg-5">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-clock text-primary me-2"></i>Pengaturan Scheduler</h3>
+                    </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label for="scheduler_time" class="form-label fw-medium">Jam Kirim Notifikasi Otomatis</label>
-                            <input type="time" class="form-control" id="scheduler_time" name="scheduler_time"
-                                   value="{{ old('scheduler_time', $settings['scheduler_time']) }}" required>
-                            <div class="form-text">Cron job mengirim reminder setiap hari pada jam ini (default 16:00).</div>
-                        </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" role="switch" id="scheduler_active"
-                                   name="scheduler_active" value="1" @checked(old('scheduler_active', $settings['scheduler_active']))>
-                            <label class="form-check-label fw-medium" for="scheduler_active">
-                                Scheduler <span id="schedulerLabel">{{ $settings['scheduler_active'] ? 'Active' : 'Inactive' }}</span>
-                            </label>
-                        </div>
+                        <label for="cron_schedule_time" class="form-label fw-medium">Jam Kirim Notifikasi Otomatis</label>
+                        <input type="time" class="form-control" id="cron_schedule_time" name="cron_schedule_time"
+                               value="{{ old('cron_schedule_time', $settings['cron_schedule_time']) }}" required>
+                        <div class="form-text">Cron job mengirim reminder setiap hari pada jam ini (default 16:00).</div>
                     </div>
-                    <div class="card-footer bg-white text-end mt-auto">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fa-solid fa-floppy-disk me-1"></i> Simpan
-                        </button>
-                    </div>
-                </form>
+                </div>
+            </div>
+
+            <div class="col-12 text-end">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-floppy-disk me-1"></i> Simpan Pengaturan
+                </button>
             </div>
         </div>
+    </form>
+
+    <div class="row g-4 mt-0">
 
         {{-- Card 3: System & API Logs --}}
         <div class="col-12">
@@ -155,17 +156,14 @@
 
 @push('scripts')
 <script>
-    // Tampilkan / sembunyikan token
-    document.getElementById('toggleToken').addEventListener('click', function () {
-        const input = document.getElementById('telegram_token');
-        const show = input.type === 'password';
-        input.type = show ? 'text' : 'password';
-        this.innerHTML = show ? '<i class="fa-regular fa-eye-slash"></i>' : '<i class="fa-regular fa-eye"></i>';
-    });
-
-    // Label toggle scheduler
-    document.getElementById('scheduler_active').addEventListener('change', function () {
-        document.getElementById('schedulerLabel').textContent = this.checked ? 'Active' : 'Inactive';
+    // Tampilkan / sembunyikan kredensial
+    document.querySelectorAll('.btn-toggle-secret').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById(btn.dataset.target);
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.innerHTML = show ? '<i class="fa-regular fa-eye-slash"></i>' : '<i class="fa-regular fa-eye"></i>';
+        });
     });
 </script>
 @endpush
