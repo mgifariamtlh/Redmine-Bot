@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\TelegramMappingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -52,17 +53,8 @@ Route::get('/', function () {
     return view('dashboard', compact('stats', 'deploys', 'logs'));
 })->name('dashboard');
 
-Route::get('/users', function () {
-    $users = [
-        ['name' => 'Budi Santoso', 'redmine_login' => 'budi.s',   'telegram' => 'budi_santoso', 'chat_id' => '512334871', 'status' => 'connected'],
-        ['name' => 'Siti Aminah',  'redmine_login' => 'siti.a',   'telegram' => 'siti_aminah',  'chat_id' => '623198455', 'status' => 'connected'],
-        ['name' => 'Rudi Hartono', 'redmine_login' => 'rudi.h',   'telegram' => 'rudi_h',       'chat_id' => '734562190', 'status' => 'connected'],
-        ['name' => 'Dewi Lestari', 'redmine_login' => 'dewi.l',   'telegram' => 'dewilestari',  'chat_id' => '845671203', 'status' => 'pending'],
-        ['name' => 'Andi Wijaya',  'redmine_login' => 'andi.w',   'telegram' => null,           'chat_id' => '58812345',  'status' => 'disconnected'],
-    ];
-
-    return view('users.index', compact('users'));
-})->name('users.index');
+Route::resource('user-mappings', TelegramMappingController::class)
+    ->only(['index', 'store', 'update', 'destroy']);
 
 Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
 Route::post('/deployments/sync', [DeploymentController::class, 'sync'])->name('deployments.sync');

@@ -202,8 +202,8 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ route('users.index') }}"
-                       class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}">
+                    <a href="{{ route('user-mappings.index') }}"
+                       class="nav-link {{ request()->routeIs('user-mappings.*') ? 'active' : '' }}">
                         <i class="fa-solid fa-users-gear"></i> User Mapping
                     </a>
                 </li>
