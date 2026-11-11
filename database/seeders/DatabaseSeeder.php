@@ -20,5 +20,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@admin.com'],
             ['name' => 'Administrator', 'password' => 'password'],
         );
+
+        $this->call(SettingSeeder::class);
     }
 }

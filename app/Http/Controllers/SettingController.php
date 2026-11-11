@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -10,14 +11,15 @@ class SettingController extends Controller
 {
     public function index(): View
     {
-        // Data dummy (tahap desain UI). Nantinya diambil dari tabel settings & logs.
+        // Kredensial tidak pernah dikirim ke view; hanya status terisi atau belum.
         $settings = [
-            'redmine_url'      => 'https://redmine.example.com',
-            'telegram_token'   => '',
-            'scheduler_time'   => '16:00',
-            'scheduler_active' => true,
+            'redmine_base_url'   => Setting::get('redmine_base_url'),
+            'cron_schedule_time' => Setting::get('cron_schedule_time'),
+            'has_api_key'        => Setting::has('redmine_api_key'),
+            'has_bot_token'      => Setting::has('telegram_bot_token'),
         ];
 
+        // Data dummy (belum ada tabel log).
         $logs = [
             ['level' => 'success', 'source' => 'Redmine',  'message' => 'Sinkronisasi issue selesai (48 issue)',       'time' => '2026-10-30 15:58'],
             ['level' => 'info',    'source' => 'Telegram', 'message' => 'Reminder deploy #1063 terkirim ke @rudi_h',   'time' => '2026-10-30 15:45'],
@@ -29,25 +31,25 @@ class SettingController extends Controller
         return view('settings.index', compact('settings', 'logs'));
     }
 
-    public function updateIntegration(Request $request): RedirectResponse
+    public function update(Request $request): RedirectResponse
     {
-        $request->validate([
-            'redmine_url'    => ['required', 'url'],
-            'telegram_token' => ['nullable', 'string'],
+        $data = $request->validate([
+            'redmine_base_url'   => ['required', 'url', 'max:255'],
+            'redmine_api_key'    => ['nullable', 'string', 'max:255'],
+            'telegram_bot_token' => ['nullable', 'string', 'max:255'],
+            'cron_schedule_time' => ['required', 'date_format:H:i'],
         ]);
 
-        // TODO: simpan ke database (token dienkripsi).
-        return back()->with('success', 'Konfigurasi API & integrasi disimpan.');
-    }
+        Setting::set('redmine_base_url', rtrim($data['redmine_base_url'], '/'));
+        Setting::set('cron_schedule_time', $data['cron_schedule_time']);
 
-    public function updateScheduler(Request $request): RedirectResponse
-    {
-        $request->validate([
-            'scheduler_time' => ['required', 'date_format:H:i'],
-        ]);
+        // Kolom kredensial yang dikosongkan berarti "jangan diubah".
+        foreach (Setting::SECRET_KEYS as $key) {
+            if (filled($data[$key] ?? null)) {
+                Setting::set($key, $data[$key]);
+            }
+        }
 
-        // TODO: simpan ke database. Gunakan $request->boolean('scheduler_active')
-        // karena checkbox tidak terkirim saat nonaktif.
-        return back()->with('success', 'Pengaturan scheduler disimpan.');
+        return redirect()->route('settings.index')->with('success', 'Pengaturan berhasil disimpan.');
     }
 }
