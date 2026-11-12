@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'redmine' => [
+        // Nama Custom Field issue di Redmine yang berisi jam deploy.
+        'deploy_time_field' => env('REDMINE_DEPLOY_TIME_FIELD', 'Jam Deploy'),
+        // Batas waktu tiap request ke Redmine (detik) dan jumlah issue terbaru per status.
+        'timeout'           => env('REDMINE_TIMEOUT', 60),
+        'limit_per_status'  => env('REDMINE_LIMIT_PER_STATUS', 50),
+    ],
+
 ];

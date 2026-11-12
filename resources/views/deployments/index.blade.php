@@ -32,6 +32,13 @@
         </div>
     @endif
 
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-circle-exclamation me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+        </div>
+    @endif
+
     <div class="card">
         <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
             <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-calendar-check text-primary me-2"></i>Daftar Tugas</h3>
@@ -62,29 +69,46 @@
                 </thead>
                 <tbody>
                     @forelse ($deployments as $d)
-                        @php [$color, $label, $icon] = $statusMap[$d['status']]; @endphp
+                        @php
+                            [$color, $label, $icon] = $statusMap[$d->status];
+                            $canRemind = $d->mapping?->is_active;
+                        @endphp
                         <tr>
-                            <td><span class="fw-semibold text-primary">#{{ $d['issue_id'] }}</span></td>
-                            <td>{{ $d['title'] }}</td>
+                            <td><span class="fw-semibold text-primary">#{{ $d->issue_id }}</span></td>
+                            <td>{{ $d->subject }}</td>
                             <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="avatar rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-semibold flex-shrink-0">
-                                        {{ collect(explode(' ', $d['pic']))->map(fn ($w) => $w[0])->take(2)->join('') }}
-                                    </span>
-                                    {{ $d['pic'] }}
-                                </div>
+                                @if ($d->pic_name)
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="avatar rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-semibold flex-shrink-0">
+                                            {{ strtoupper(collect(preg_split('/\s+/', trim($d->pic_name)))->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->join('')) }}
+                                        </span>
+                                        {{ $d->pic_name }}
+                                        @unless ($d->mapping)
+                                            <i class="fa-solid fa-link-slash text-warning" title="Belum ada User Mapping Telegram"></i>
+                                        @endunless
+                                    </div>
+                                @else
+                                    <span class="text-muted fst-italic">Belum di-assign</span>
+                                @endif
                             </td>
-                            <td class="text-nowrap"><i class="fa-regular fa-clock text-muted me-1"></i>{{ $d['deploy_time'] }}</td>
+                            <td class="text-nowrap">
+                                @if ($d->deploy_time)
+                                    <i class="fa-regular fa-clock text-muted me-1"></i>{{ $d->deploy_time }}
+                                @else
+                                    <span class="text-muted">-</span>
+                                @endif
+                            </td>
                             <td>
                                 <span class="badge rounded-pill bg-{{ $color }} {{ $color === 'warning' ? 'text-dark' : '' }}">
                                     <i class="fa-solid {{ $icon }} me-1"></i>{{ $label }}
                                 </span>
                             </td>
                             <td class="text-end text-nowrap">
-                                <form action="{{ route('deployments.notify', $d['issue_id']) }}" method="POST" class="d-inline">
+                                <form action="{{ route('deployments.reminder', $d) }}" method="POST" class="d-inline">
                                     @csrf
                                     <button type="submit" class="btn btn-sm btn-outline-primary"
-                                            title="Kirim Notifikasi Reminder">
+                                            title="{{ $canRemind ? 'Kirim Notifikasi Reminder' : 'PIC belum punya mapping Telegram aktif' }}"
+                                            @disabled(! $canRemind)>
                                         <i class="fa-solid fa-paper-plane"></i>
                                         <span class="d-none d-xl-inline ms-1">Kirim Notifikasi Reminder</span>
                                     </button>
@@ -103,8 +127,14 @@
             </table>
         </div>
 
-        <div class="card-footer bg-white small text-muted">
-            Menampilkan {{ count($deployments) }} tugas
+        <div class="card-footer bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center small text-muted">
+            <span>
+                Menampilkan {{ $deployments->count() }} dari {{ $deployments->total() }} tugas
+                @if ($lastSync) &middot; Sync terakhir: {{ $lastSync }} @endif
+            </span>
+            @if ($deployments->hasPages())
+                {{ $deployments->links('pagination::bootstrap-5') }}
+            @endif
         </div>
     </div>
 @endsection

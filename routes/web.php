@@ -58,7 +58,7 @@ Route::resource('user-mappings', TelegramMappingController::class)
 
 Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
 Route::post('/deployments/sync', [DeploymentController::class, 'sync'])->name('deployments.sync');
-Route::post('/deployments/{issueId}/notify', [DeploymentController::class, 'notify'])->whereNumber('issueId')->name('deployments.notify');
+Route::post('/deployments/{deployment}/reminder', [DeploymentController::class, 'sendReminder'])->name('deployments.reminder');
 
 Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
 Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
