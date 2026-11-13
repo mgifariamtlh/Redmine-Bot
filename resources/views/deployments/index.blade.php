@@ -6,7 +6,6 @@
     $statusMap = [
         'test-passed' => ['warning',   'Test Passed', 'fa-vial-circle-check'],
         'deployed'    => ['success',   'Deployed',    'fa-rocket'],
-        'closed'      => ['dark',      'Closed',      'fa-lock'],
     ];
 @endphp
 
@@ -62,6 +61,7 @@
                         <th>Issue ID</th>
                         <th>Judul Task</th>
                         <th>PIC / Developer</th>
+                        <th>Tanggal Deploy</th>
                         <th>Jam Deploy</th>
                         <th>Status</th>
                         <th class="text-end">Aksi</th>
@@ -74,7 +74,12 @@
                             $canRemind = $d->mapping?->is_active;
                         @endphp
                         <tr>
-                            <td><span class="fw-semibold text-primary">#{{ $d->issue_id }}</span></td>
+                            <td>
+                                <a href="{{ $d->url }}" target="_blank" rel="noopener noreferrer"
+                                   class="fw-semibold text-decoration-none" title="Buka di Redmine">
+                                    #{{ $d->issue_id }} <i class="fa-solid fa-arrow-up-right-from-square small"></i>
+                                </a>
+                            </td>
                             <td>{{ $d->subject }}</td>
                             <td>
                                 @if ($d->pic_name)
@@ -89,6 +94,13 @@
                                     </div>
                                 @else
                                     <span class="text-muted fst-italic">Belum di-assign</span>
+                                @endif
+                            </td>
+                            <td class="text-nowrap">
+                                @if ($d->deploy_date)
+                                    <i class="fa-regular fa-calendar text-muted me-1"></i>{{ $d->deploy_date->translatedFormat('d M Y') }}
+                                @else
+                                    <span class="text-muted">-</span>
                                 @endif
                             </td>
                             <td class="text-nowrap">
@@ -117,7 +129,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-5">
+                            <td colspan="7" class="text-center text-muted py-5">
                                 <i class="fa-solid fa-inbox fa-2x mb-2 d-block"></i>
                                 Tidak ada tugas dengan status ini.
                             </td>

@@ -11,38 +11,56 @@ use RuntimeException;
 
 class RedmineService
 {
-    /** Jumlah issue terbaru (berdasarkan updated_on) yang ditarik per status. */
-    private const DEFAULT_LIMIT_PER_STATUS = 50;
-
     /**
-     * Tarik issue berstatus test-passed / deployed / closed dari Redmine.
+     * Tarik issue Test Passed / Deployed yang Tanggal Deploy-nya terisi dan
+     * >= N bulan lalu, diurutkan Tanggal Deploy terbaru dulu. Satu request saja.
      *
-     * @return list<array{issue_id:int, subject:string, redmine_user_id:?int, pic_name:?string, deploy_time:?string, status:string}>
+     * @return list<array{issue_id:int, subject:string, redmine_user_id:?int, pic_name:?string, deploy_date:string, deploy_time:?string, status:string}>
      */
     public function fetchDeployments(): array
     {
         $client = $this->client();
-        $field = (string) config('services.redmine.deploy_time_field');
+        $statuses = $this->resolveStatusIds($client);
+        $dateFieldId = $this->resolveDateFieldId($client);
+
+        $since = now()->subMonths((int) config('services.redmine.deploy_months_back', 3))->toDateString();
+
+        // Filter bersarang ("f[]/op[]/v[]") dirakit manual: format array bawaan Guzzle (f[0]=)
+        // tidak dibaca Redmine sebagai array.
+        $query = http_build_query([
+            'f'     => ['status_id', "cf_{$dateFieldId}"],
+            'op'    => ['status_id' => '=', "cf_{$dateFieldId}" => '>='],
+            'v'     => ['status_id' => array_keys($statuses), "cf_{$dateFieldId}" => [$since]],
+            'sort'  => "cf_{$dateFieldId}:desc",
+            'limit' => (int) config('services.redmine.limit', 100),
+        ], '', '&', PHP_QUERY_RFC3986);
+        $query = preg_replace('/%5B\d+%5D/', '%5B%5D', $query); // f[0] => f[]
+
+        $json = $this->get($client, '/issues.json?'.$query);
+
+        $dateField = (string) config('services.redmine.deploy_date_field');
+        $timeField = (string) config('services.redmine.deploy_time_field');
 
         $rows = [];
-        // Satu request per status, hanya issue terbaru (tanpa pagination) agar sync tetap cepat.
-        foreach ($this->resolveStatusIds($client) as $statusId => $status) {
-            $json = $this->get($client, '/issues.json', [
-                'status_id' => $statusId,
-                'limit'     => (int) config('services.redmine.limit_per_status', self::DEFAULT_LIMIT_PER_STATUS),
-                'sort'      => 'updated_on:desc',
-            ]);
+        foreach ($json['issues'] ?? [] as $issue) {
+            $fields = $issue['custom_fields'] ?? [];
+            $date = $this->customFieldValue($fields, $dateField);
+            $status = $statuses[(int) ($issue['status']['id'] ?? 0)] ?? null;
 
-            foreach ($json['issues'] ?? [] as $issue) {
-                $rows[] = [
-                    'issue_id'        => (int) $issue['id'],
-                    'subject'         => (string) $issue['subject'],
-                    'redmine_user_id' => isset($issue['assigned_to']['id']) ? (int) $issue['assigned_to']['id'] : null,
-                    'pic_name'        => $issue['assigned_to']['name'] ?? null,
-                    'deploy_time'     => $this->customFieldValue($issue['custom_fields'] ?? [], $field),
-                    'status'          => $status,
-                ];
+            // Abaikan tanggal deploy kosong dan status di luar yang diinginkan.
+            if (! $date || ! $status) {
+                continue;
             }
+
+            $rows[] = [
+                'issue_id'        => (int) $issue['id'],
+                'subject'         => (string) $issue['subject'],
+                'redmine_user_id' => isset($issue['assigned_to']['id']) ? (int) $issue['assigned_to']['id'] : null,
+                'pic_name'        => $issue['assigned_to']['name'] ?? null,
+                'deploy_date'     => $date,
+                'deploy_time'     => $this->customFieldValue($fields, $timeField),
+                'status'          => $status,
+            ];
         }
 
         return $rows;
@@ -67,10 +85,62 @@ class RedmineService
         }
 
         if (! $ids) {
-            throw new RuntimeException('Status test-passed / deployed / closed tidak ditemukan di Redmine.');
+            throw new RuntimeException('Status Test Passed / Deployed tidak ditemukan di Redmine.');
         }
 
         return $ids;
+    }
+
+    /**
+     * Filter custom field di Redmine memakai ID angka (cf_<id>). Urutan pencarian:
+     * .env, cache di tabel settings, /custom_fields.json (khusus admin), lalu
+     * dibaca dari issue contoh.
+     */
+    private function resolveDateFieldId(PendingRequest $client): int
+    {
+        if ($id = config('services.redmine.deploy_date_field_id')) {
+            return (int) $id;
+        }
+
+        $name = (string) config('services.redmine.deploy_date_field');
+
+        if ($id = Setting::get('redmine_deploy_date_field_id')) {
+            return (int) $id;
+        }
+
+        // Akun non-admin biasanya ditolak (403); abaikan lalu pakai issue contoh.
+        $response = $client->get('/custom_fields.json');
+        if ($response->successful()) {
+            foreach ($response->json('custom_fields', []) as $f) {
+                if (strcasecmp($f['name'] ?? '', $name) === 0 && ($f['customized_type'] ?? '') === 'issue') {
+                    return $this->rememberFieldId($f['id']);
+                }
+            }
+        }
+
+        $sample = $this->get($client, '/issues.json?'.http_build_query([
+            'status_id' => '*',
+            'limit'     => 25,
+        ]));
+        foreach ($sample['issues'] ?? [] as $issue) {
+            foreach ($issue['custom_fields'] ?? [] as $f) {
+                if (strcasecmp($f['name'] ?? '', $name) === 0 && isset($f['id'])) {
+                    return $this->rememberFieldId($f['id']);
+                }
+            }
+        }
+
+        throw new RuntimeException(
+            "ID custom field \"{$name}\" tidak ditemukan otomatis. Isi REDMINE_DEPLOY_DATE_FIELD_ID di .env "
+            .'(lihat angka cf_<id> pada URL filter di Redmine).'
+        );
+    }
+
+    private function rememberFieldId(int|string $id): int
+    {
+        Setting::set('redmine_deploy_date_field_id', (string) $id);
+
+        return (int) $id;
     }
 
     private function customFieldValue(array $fields, string $name): ?string
@@ -102,9 +172,9 @@ class RedmineService
             ->timeout((int) config('services.redmine.timeout', 60));
     }
 
-    private function get(PendingRequest $client, string $path, array $query = []): array
+    private function get(PendingRequest $client, string $path): array
     {
-        $response = $client->get($path, $query);
+        $response = $client->get($path);
 
         if ($response->status() === 401) {
             throw new RuntimeException('Redmine menolak API Key (401). Periksa kembali di menu Settings.');
