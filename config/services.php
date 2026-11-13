@@ -37,10 +37,16 @@ return [
 
     'redmine' => [
         // Nama Custom Field issue di Redmine yang berisi jam deploy.
-        'deploy_time_field' => env('REDMINE_DEPLOY_TIME_FIELD', 'Jam Deploy'),
-        // Batas waktu tiap request ke Redmine (detik) dan jumlah issue terbaru per status.
-        'timeout'           => env('REDMINE_TIMEOUT', 60),
-        'limit_per_status'  => env('REDMINE_LIMIT_PER_STATUS', 50),
+        'deploy_time_field'    => env('REDMINE_DEPLOY_TIME_FIELD', 'Jam Deploy'),
+        // Nama Custom Field tanggal deploy. ID-nya (angka) otomatis dicari; isi
+        // REDMINE_DEPLOY_DATE_FIELD_ID bila pencarian otomatis gagal.
+        'deploy_date_field'    => env('REDMINE_DEPLOY_DATE_FIELD', 'Tanggal Deploy'),
+        'deploy_date_field_id' => env('REDMINE_DEPLOY_DATE_FIELD_ID'),
+        // Hanya ambil issue dengan Tanggal Deploy >= N bulan lalu.
+        'deploy_months_back'   => env('REDMINE_DEPLOY_MONTHS_BACK', 3),
+        // Batas waktu tiap request ke Redmine (detik) dan jumlah maksimum issue per sync.
+        'timeout'              => env('REDMINE_TIMEOUT', 60),
+        'limit'              => env('REDMINE_LIMIT', 100),
     ],
 
 ];

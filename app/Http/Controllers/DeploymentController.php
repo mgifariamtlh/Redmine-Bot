@@ -25,6 +25,7 @@ class DeploymentController extends Controller
 
         $deployments = Deployment::with('mapping')
             ->where('status', $status)
+            ->orderByDesc('deploy_date')
             ->orderBy('deploy_time')
             ->orderByDesc('issue_id')
             ->paginate(20)
@@ -82,9 +83,9 @@ class DeploymentController extends Controller
             return back()->with('error', 'PIC belum punya User Mapping Telegram yang aktif.');
         }
 
-        $time = $deployment->deploy_time ?: 'belum ditentukan';
+        $time = trim($deployment->deploy_date?->translatedFormat('d M Y').' '.$deployment->deploy_time) ?: 'belum ditentukan';
         $text = "🔔 <b>Reminder Deploy</b>\n"
-            ."Halo {$mapping->name}, task <b>#{$deployment->issue_id}</b> "
+            ."Halo ".e($mapping->name).", task <a href=\"".e($deployment->url)."\">#{$deployment->issue_id}</a> "
             .e($deployment->subject)." dijadwalkan deploy pada <b>{$time}</b>.";
 
         try {
