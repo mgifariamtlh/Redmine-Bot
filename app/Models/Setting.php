@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Crypt;
 class Setting extends Model
 {
     /** Key berisi kredensial; disimpan terenkripsi di database. */
-    public const SECRET_KEYS = ['redmine_api_key', 'telegram_bot_token'];
+    public const SECRET_KEYS = ['redmine_api_key', 'telegram_bot_token', 'telegram_webhook_secret'];
 
     /** Nilai awal tiap key (dipakai seeder dan sebagai fallback). */
     public const DEFAULTS = [

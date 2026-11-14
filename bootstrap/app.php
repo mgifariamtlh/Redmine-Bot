@@ -11,7 +11,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Telegram memanggil webhook tanpa token CSRF; keaslian request dicek
+        // lewat secret token di TelegramBotController.
+        $middleware->validateCsrfTokens(except: ['telegram/webhook']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
