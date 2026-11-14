@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\TelegramBotController;
 use App\Http\Controllers\TelegramMappingController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,7 +20,10 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
 });
 
-Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+// Dipanggil Telegram (bukan browser): di luar auth, bebas CSRF, dijaga secret token.
+Route::post('/telegram/webhook', [TelegramBotController::class, 'handleWebhook'])->name('telegram.webhook');
+
+Route::post('/logout',[AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
 // Semua halaman menu di bawah ini hanya bisa diakses setelah login.
 Route::middleware('auth')->group(function () {

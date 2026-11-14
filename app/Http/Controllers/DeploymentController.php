@@ -62,12 +62,29 @@ class DeploymentController extends Controller
             }
         });
 
+        // Hapus data lokal yang di Redmine sudah Closed. Hanya record lokal yang TIDAK ikut
+        // ditarik di atas yang dicek (yang ditarik pasti Test Passed / Deployed), sehingga
+        // data di luar rentang tanggal / batas limit tidak terhapus hanya karena tak terambil.
+        $fetchedIds = collect($issues)->pluck('issue_id');
+        $localIds = Deployment::whereNotIn('issue_id', $fetchedIds)->pluck('issue_id')->all();
+
+        try {
+            $closedIds = $redmine->fetchClosedIssueIds($localIds);
+        } catch (RuntimeException|ConnectionException $e) {
+            // Data sudah tersimpan; hanya pembersihan yang gagal.
+            Setting::set('last_sync_at', now()->toDateTimeString());
+
+            return back()->with('error', 'Data diperbarui ('.count($issues).' task), tetapi pengecekan status Closed gagal: '.$e->getMessage());
+        }
+
+        $deleted = $closedIds ? Deployment::whereIn('issue_id', $closedIds)->delete() : 0;
+
         Setting::set('last_sync_at', now()->toDateTimeString());
 
         $unmapped = collect($issues)->pluck('redmine_user_id')->filter()->unique()
             ->reject(fn ($id) => isset($names[(string) $id]))->count();
 
-        $message = 'Sinkronisasi selesai: '.count($issues).' task diperbarui.';
+        $message = 'Sync selesai: '.count($issues)." data diperbarui, {$deleted} data closed dihapus.";
         if ($unmapped > 0) {
             $message .= " {$unmapped} PIC belum punya User Mapping Telegram.";
         }

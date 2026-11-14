@@ -5,12 +5,19 @@ namespace App\Services;
 use App\Models\Deployment;
 use App\Models\Setting;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class RedmineService
 {
+    /** Perintah bot harus membalas cepat; timeout lebih pendek daripada sync. */
+    private const BOT_TIMEOUT = 15;
+
+    /** Jumlah task maksimum per balasan bot (batas pesan Telegram 4096 karakter). */
+    private const BOT_LIMIT = 20;
+
     /**
      * Tarik issue Test Passed / Deployed yang Tanggal Deploy-nya terisi dan
      * >= N bulan lalu, diurutkan Tanggal Deploy terbaru dulu. Satu request saja.
@@ -64,6 +71,37 @@ class RedmineService
         }
 
         return $rows;
+    }
+
+    /**
+     * Dari daftar issue tertentu, kembalikan ID yang statusnya sekarang "Closed" di Redmine.
+     * Issue yang tidak dikembalikan Redmine (dihapus / tidak bisa diakses) dianggap
+     * belum closed, sehingga datanya tidak ikut dihapus.
+     *
+     * @param  list<int>  $issueIds
+     * @return list<int>
+     */
+    public function fetchClosedIssueIds(array $issueIds): array
+    {
+        $client = $this->client();
+        $closed = [];
+
+        // Filter issue_id menerima daftar ID dipisah koma; maksimal 100 per request.
+        foreach (array_chunk($issueIds, 100) as $chunk) {
+            $json = $this->get($client, '/issues.json?'.http_build_query([
+                'issue_id'  => implode(',', $chunk),
+                'status_id' => '*',
+                'limit'     => 100,
+            ]));
+
+            foreach ($json['issues'] ?? [] as $issue) {
+                if (Str::slug($issue['status']['name'] ?? '') === 'closed') {
+                    $closed[] = (int) $issue['id'];
+                }
+            }
+        }
+
+        return $closed;
     }
 
     /**
@@ -156,7 +194,91 @@ class RedmineService
         return null;
     }
 
-    private function client(): PendingRequest
+    /**
+     * Task milik user dengan status New atau In Progress.
+     *
+     * @return array{total:int, issues:list<array{id:int, subject:string, status:string, due_date:?string}>}
+     */
+    public function fetchActiveTasks(int $userId): array
+    {
+        $client = $this->client(self::BOT_TIMEOUT);
+        $ids = $this->statusIds($client, fn ($s) => in_array(Str::slug($s['name']), ['new', 'in-progress'], true));
+
+        return $this->queryTasks($client, [
+            'assigned_to_id' => ['=', [$userId]],
+            'status_id'      => ['=', $ids],
+        ], 'updated_on:desc');
+    }
+
+    /**
+     * Task milik user yang due date-nya sudah lewat (kemarin atau sebelumnya) dan belum
+     * Test Passed / Deployed / Closed. Pengecualian status dilakukan di sisi Redmine
+     * supaya batas limit tidak habis oleh task yang seharusnya disaring.
+     *
+     * @return array{total:int, issues:list<array{id:int, subject:string, status:string, due_date:?string}>}
+     */
+    public function fetchOverdueTasks(int $userId): array
+    {
+        $client = $this->client(self::BOT_TIMEOUT);
+        $excluded = [...Deployment::STATUSES, 'closed'];
+        $ids = $this->statusIds($client, fn ($s) => ! ($s['is_closed'] ?? false) && ! in_array(Str::slug($s['name']), $excluded, true));
+
+        return $this->queryTasks($client, [
+            'assigned_to_id' => ['=', [$userId]],
+            'status_id'      => ['=', $ids],
+            'due_date'       => ['<=', [now()->subDay()->toDateString()]],
+        ], 'due_date:asc');
+    }
+
+    /**
+     * @param  array<string, array{0:string, 1:list<int|string>}>  $filters  field => [operator, nilai]
+     * @return array{total:int, issues:list<array{id:int, subject:string, status:string, due_date:?string}>}
+     */
+    private function queryTasks(PendingRequest $client, array $filters, string $sort): array
+    {
+        $f = $op = $v = [];
+        foreach ($filters as $field => [$operator, $values]) {
+            $f[] = $field;
+            $op[$field] = $operator;
+            $v[$field] = $values;
+        }
+
+        // Format array Guzzle (f[0]=) tidak dibaca Redmine; ubah ke f[]=.
+        $query = http_build_query(['f' => $f, 'op' => $op, 'v' => $v, 'sort' => $sort, 'limit' => self::BOT_LIMIT], '', '&', PHP_QUERY_RFC3986);
+        $json = $this->get($client, '/issues.json?'.preg_replace('/%5B\d+%5D/', '%5B%5D', $query));
+
+        return [
+            'total'  => (int) ($json['total_count'] ?? 0),
+            'issues' => array_map(fn ($i) => [
+                'id'       => (int) $i['id'],
+                'subject'  => (string) $i['subject'],
+                'status'   => (string) ($i['status']['name'] ?? '-'),
+                'due_date' => $i['due_date'] ?? null,
+            ], $json['issues'] ?? []),
+        ];
+    }
+
+    /**
+     * ID status Redmine yang lolos $match. Daftar status di-cache 1 jam
+     * karena hampir tidak berubah dan dipakai di setiap perintah bot.
+     *
+     * @return list<int>
+     */
+    private function statusIds(PendingRequest $client, callable $match): array
+    {
+        $key = 'redmine.issue_statuses.'.md5((string) Setting::get('redmine_base_url'));
+        $statuses = Cache::remember($key, 3600, fn () => $this->get($client, '/issue_statuses.json')['issue_statuses'] ?? []);
+
+        $ids = array_values(array_map(fn ($s) => (int) $s['id'], array_filter($statuses, $match)));
+
+        if (! $ids) {
+            throw new RuntimeException('Status yang dibutuhkan tidak ditemukan di Redmine.');
+        }
+
+        return $ids;
+    }
+
+    private function client(?int $timeout = null): PendingRequest
     {
         $baseUrl = rtrim((string) Setting::get('redmine_base_url'), '/');
         $apiKey = Setting::get('redmine_api_key');
@@ -169,7 +291,7 @@ class RedmineService
             ->withHeaders(['X-Redmine-Api-Key' => $apiKey])
             ->acceptJson()
             ->connectTimeout(5)
-            ->timeout((int) config('services.redmine.timeout', 60));
+            ->timeout($timeout ?? (int) config('services.redmine.timeout', 60));
     }
 
     private function get(PendingRequest $client, string $path): array
