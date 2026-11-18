@@ -12,20 +12,10 @@ class TelegramMappingController extends Controller
 {
     public function index(Request $request): View
     {
-        $search = trim((string) $request->query('q'));
+        // Pencarian, pagination, dan row count ditangani DataTables di sisi klien.
+        $mappings = TelegramMapping::query()->latest()->get();
 
-        $mappings = TelegramMapping::query()
-            ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('redmine_user_id', 'like', "%{$search}%")
-                    ->orWhere('telegram_username', 'like', "%{$search}%")
-                    ->orWhere('chat_id', 'like', "%{$search}%");
-            }))
-            ->latest()
-            ->paginate(10)
-            ->withQueryString();
-
-        return view('user-mappings.index', compact('mappings', 'search'));
+        return view('user-mappings.index', compact('mappings'));
     }
 
     public function store(Request $request): RedirectResponse

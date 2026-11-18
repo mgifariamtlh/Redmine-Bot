@@ -28,8 +28,7 @@ class DeploymentController extends Controller
             ->orderByDesc('deploy_date')
             ->orderBy('deploy_time')
             ->orderByDesc('issue_id')
-            ->paginate(20)
-            ->withQueryString();
+            ->get();
 
         return view('deployments.index', [
             'deployments' => $deployments,
