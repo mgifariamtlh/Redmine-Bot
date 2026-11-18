@@ -3,102 +3,175 @@
 @section('title', 'Dashboard')
 
 @php
-    $statusBadge = [
-        'Done'        => 'success',
-        'In Progress' => 'primary',
-        'Scheduled'   => 'warning',
-        'Failed'      => 'danger',
-    ];
+    $statusOrder = ['Scheduled', 'In Progress', 'Done', 'Failed'];
+    $deployCollection = collect($deploys);
+    $statusCounts = collect($statusOrder)->mapWithKeys(
+        fn ($s) => [$s => $deployCollection->where('status', $s)->count()]
+    );
+    $maxCount = max($statusCounts->max(), 1);
+    $pct = round($stats['tasks_done'] / max($stats['tasks_today'], 1) * 100);
 @endphp
 
+@push('styles')
+<style>
+    .chart-bars { display: flex; align-items: flex-end; gap: 1.25rem; height: 190px; padding: 0 .5rem; border-bottom: 1px dashed #d9d9d9; }
+    .chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
+    .chart-bar { width: 14px; border-radius: 999px; background: #0b0b0b; min-height: 8px; }
+    .chart-bar.light { background: #d4d4d4; }
+    .chart-pair { display: flex; align-items: flex-end; gap: 6px; height: 100%; }
+    .chart-val { font-size: .72rem; font-weight: 700; background: #0b0b0b; color: #fff; border-radius: 999px; padding: .1rem .55rem; margin-bottom: .35rem; }
+    .chart-lbl { display: flex; gap: 1.25rem; padding: .6rem .5rem 0; }
+    .chart-lbl span { flex: 1; text-align: center; font-size: .75rem; color: var(--ink-soft); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: .3rem; }
+
+    .conn-item { display: flex; align-items: center; gap: .85rem; padding: .7rem 0; }
+    .conn-logo { width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.1); display: flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0; }
+    .conn-tag { margin-left: auto; border: 1px solid #e0e0e0; border-radius: 999px; padding: .3rem .85rem; font-size: .75rem; font-weight: 600; background: #fafafa; }
+    .conn-tag.off { background: #f4dcda; border-color: #f4dcda; color: #8f1d17; }
+
+    .log-ico { width: 34px; height: 34px; border-radius: 50%; background: #f2f2f2; color: #333; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+</style>
+@endpush
+
 @section('content')
-    {{-- Header halaman --}}
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-        <div>
-            <h2 class="h4 fw-bold mb-1">Dashboard</h2>
-            <p class="text-muted mb-0">Ringkasan aktivitas bot hari ini, {{ now()->translatedFormat('l, d F Y') }}</p>
+    {{-- ================= QUICK STATS ================= --}}
+    <div class="row g-3 mb-4 align-items-stretch">
+        <div class="col-12 col-xl-3 d-flex flex-column justify-content-center pe-xl-4 mb-2 mb-xl-0">
+            <h2 class="h4 page-title mb-2">Quick Stats</h2>
+            <p class="text-muted mb-3">Ringkasan aktivitas bot hari ini, {{ now()->translatedFormat('l, d F Y') }}</p>
+            <div>
+                <button class="btn btn-dark btn-sm"><i class="fa-solid fa-rotate me-1"></i> Sinkronisasi Redmine</button>
+            </div>
         </div>
-        <button class="btn btn-outline-primary btn-sm">
-            <i class="fa-solid fa-rotate me-1"></i> Sinkronisasi Redmine
-        </button>
+
+        <div class="col-12 col-xl-9">
+            <div class="row g-3 row-cols-2 row-cols-md-3 row-cols-xl-5">
+                <div class="col">
+                    <div class="stat-tile">
+                        <div class="stat-ico"><i class="fa-solid fa-user"></i></div>
+                        <div class="stat-val">{{ $stats['total_users'] }}</div>
+                        <div class="stat-lbl">User Terhubung</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="stat-tile dark">
+                        <div class="stat-ico"><i class="fa-solid fa-briefcase"></i></div>
+                        <div class="stat-val">{{ $stats['tasks_today'] }}</div>
+                        <div class="stat-lbl">Task Hari Ini</div>
+                        <a href="{{ route('deployments.index') }}" class="stat-arrow text-dark"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="stat-tile">
+                        <div class="stat-ico"><i class="fa-solid fa-list-check"></i></div>
+                        <div class="stat-val">{{ $stats['tasks_done'] }}<small class="text-muted fw-semibold fs-6"> / {{ $stats['tasks_today'] }}</small></div>
+                        <div class="stat-lbl">Task Selesai</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="stat-tile">
+                        <div class="stat-ico"><i class="fa-solid fa-diagram-project"></i></div>
+                        <div class="stat-val">{{ $stats['redmine'] ? 'Online' : 'Offline' }}</div>
+                        <div class="stat-lbl">Redmine API</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="stat-tile">
+                        <div class="stat-ico"><i class="fa-brands fa-telegram"></i></div>
+                        <div class="stat-val">{{ $stats['telegram'] ? 'Online' : 'Offline' }}</div>
+                        <div class="stat-lbl">Telegram Bot</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    {{-- ================= STATUS CARDS ================= --}}
+    {{-- ================= STATISTIK + KONEKSI ================= --}}
     <div class="row g-3 mb-4">
-        {{-- Total User --}}
-        <div class="col-12 col-md-6 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body d-flex align-items-center gap-3">
-                    <div class="rounded-3 bg-primary-subtle text-primary d-flex align-items-center justify-content-center flex-shrink-0"
-                         style="width:56px;height:56px">
-                        <i class="fa-solid fa-users fa-lg"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Total User Terhubung</div>
-                        <div class="h3 fw-bold mb-0">{{ $stats['total_users'] }}</div>
-                        <small class="text-success"><i class="fa-solid fa-arrow-up"></i> {{ $stats['new_users'] }} user baru minggu ini</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- Task Hari Ini --}}
-        <div class="col-12 col-md-6 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body d-flex align-items-center gap-3">
-                    <div class="rounded-3 bg-warning-subtle text-warning-emphasis d-flex align-items-center justify-content-center flex-shrink-0"
-                         style="width:56px;height:56px">
-                        <i class="fa-solid fa-list-check fa-lg"></i>
-                    </div>
-                    <div class="flex-grow-1">
-                        <div class="text-muted small">Task Hari Ini</div>
-                        <div class="h3 fw-bold mb-1">{{ $stats['tasks_today'] }}</div>
-                        @php $pct = round($stats['tasks_done'] / max($stats['tasks_today'], 1) * 100); @endphp
-                        <div class="progress" style="height:6px" role="progressbar" aria-valuenow="{{ $pct }}" aria-valuemin="0" aria-valuemax="100">
-                            <div class="progress-bar bg-warning" style="width: {{ $pct }}%"></div>
-                        </div>
-                        <small class="text-muted">{{ $stats['tasks_done'] }} dari {{ $stats['tasks_today'] }} selesai</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- Status Koneksi --}}
-        <div class="col-12 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-2">Status Koneksi</div>
-                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                        <span class="fw-medium"><i class="fa-solid fa-diagram-project text-danger me-2"></i>Redmine API</span>
-                        @if ($stats['redmine'])
-                            <span class="badge bg-success-subtle text-success"><i class="fa-solid fa-circle fa-2xs me-1"></i>Online</span>
-                        @else
-                            <span class="badge bg-danger-subtle text-danger"><i class="fa-solid fa-circle fa-2xs me-1"></i>Offline</span>
-                        @endif
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center pt-2">
-                        <span class="fw-medium"><i class="fa-brands fa-telegram text-primary me-2"></i>Telegram Bot</span>
-                        @if ($stats['telegram'])
-                            <span class="badge bg-success-subtle text-success"><i class="fa-solid fa-circle fa-2xs me-1"></i>Online</span>
-                        @else
-                            <span class="badge bg-danger-subtle text-danger"><i class="fa-solid fa-circle fa-2xs me-1"></i>Offline</span>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3">
-        {{-- ================= JADWAL DEPLOY ================= --}}
         <div class="col-12 col-xl-8">
             <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-calendar-day text-primary me-2"></i>Jadwal Deploy Hari Ini</h3>
-                    <a href="#" class="btn btn-sm btn-light">Lihat Semua</a>
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="mb-0">Statistics</h3>
+                    <div class="small text-muted">
+                        <span class="me-3"><span class="legend-dot" style="background:#0b0b0b"></span>Jumlah task</span>
+                        <span><span class="legend-dot" style="background:#d4d4d4"></span>Maksimum</span>
+                    </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                <div class="card-body">
+                    <div class="chart-bars">
+                        @foreach ($statusCounts as $label => $count)
+                            <div class="chart-col">
+                                @if ($count > 0)<span class="chart-val">{{ $count }}</span>@endif
+                                <div class="chart-pair">
+                                    <div class="chart-bar" @style(['height: ' . max($count / $maxCount * 100, 4) . '%'])></div>
+                                    <div class="chart-bar light" style="height: 100%"></div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                    <div class="chart-lbl">
+                        @foreach ($statusCounts as $label => $count)
+                            <span>{{ $label }}</span>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">Status Koneksi</h3>
+                    <i class="fa-regular fa-circle-dot text-muted"></i>
+                </div>
+                <div class="card-body pt-2">
+                    <div class="conn-item">
+                        <span class="conn-logo"><i class="fa-solid fa-diagram-project"></i></span>
+                        <div class="lh-sm">
+                            <div class="fw-bold">Redmine API</div>
+                            <small class="text-muted">Integrasi task</small>
+                        </div>
+                        <span class="conn-tag {{ $stats['redmine'] ? '' : 'off' }}">{{ $stats['redmine'] ? 'Online' : 'Offline' }}</span>
+                    </div>
+                    <div class="conn-item">
+                        <span class="conn-logo"><i class="fa-brands fa-telegram"></i></span>
+                        <div class="lh-sm">
+                            <div class="fw-bold">Telegram Bot</div>
+                            <small class="text-muted">Notifikasi reminder</small>
+                        </div>
+                        <span class="conn-tag {{ $stats['telegram'] ? '' : 'off' }}">{{ $stats['telegram'] ? 'Online' : 'Offline' }}</span>
+                    </div>
+                    <div class="conn-item">
+                        <span class="conn-logo"><i class="fa-solid fa-user-plus"></i></span>
+                        <div class="lh-sm">
+                            <div class="fw-bold">User Baru</div>
+                            <small class="text-muted">Minggu ini</small>
+                        </div>
+                        <span class="conn-tag">+{{ $stats['new_users'] }}</span>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-muted">Progress task hari ini</span><strong>{{ $pct }}%</strong>
+                        </div>
+                        <div class="progress" style="height:8px;background:#ececec" role="progressbar" aria-valuenow="{{ $pct }}" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar" @style(['width: ' . $pct . '%', 'background:#0b0b0b', 'border-radius:999px'])></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ================= JADWAL DEPLOY + LOG ================= --}}
+    <div class="row g-3">
+        <div class="col-12 col-xl-8">
+            <div class="card h-100">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="mb-0">Jadwal Deploy Hari Ini</h3>
+                    <a href="{{ route('deployments.index') }}" class="btn btn-outline-primary btn-sm">Lihat Semua</a>
+                </div>
+                <div class="table-responsive pb-3">
+                    <table class="table align-middle mb-0 js-datatable">
                         <thead>
                             <tr>
                                 <th class="text-center" style="width:60px">No</th>
@@ -110,58 +183,43 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse ($deploys as $deploy)
+                            @foreach ($deploys as $deploy)
                                 <tr>
                                     <td class="text-center text-muted">{{ $loop->iteration }}</td>
                                     <td><a href="#" class="fw-semibold text-decoration-none">#{{ $deploy['issue_id'] }}</a></td>
                                     <td>{{ $deploy['task'] }}</td>
-                                    <td><i class="fa-regular fa-clock text-muted me-1"></i>{{ $deploy['time'] }}</td>
+                                    <td class="text-nowrap"><i class="fa-regular fa-clock text-muted me-1"></i>{{ $deploy['time'] }}</td>
                                     <td class="text-nowrap">{{ $deploy['pic'] }}</td>
                                     <td>
-                                        @php $color = $statusBadge[$deploy['status']] ?? 'secondary'; @endphp
-                                        <span class="badge rounded-pill bg-{{ $color }}-subtle text-{{ $color }}-emphasis border border-{{ $color }}-subtle">
+                                        <span class="badge rounded-pill {{ $deploy['status'] === 'Failed' ? 'bg-danger-subtle' : ($deploy['status'] === 'Done' ? 'bg-success' : 'bg-secondary') }}">
                                             {{ $deploy['status'] }}
                                         </span>
                                     </td>
                                 </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted py-5">
-                                        <i class="fa-regular fa-calendar-xmark fa-2x mb-2 d-block"></i>
-                                        Tidak ada jadwal deploy hari ini.
-                                    </td>
-                                </tr>
-                            @endforelse
+                            @endforeach
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        {{-- ================= LOG AKTIVITAS ================= --}}
         <div class="col-12 col-xl-4">
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>Log Aktivitas Bot</h3>
-                    <span class="badge bg-light text-muted border">Live</span>
+                    <h3 class="mb-0">Log Aktivitas Bot</h3>
+                    <span class="badge rounded-pill bg-secondary">Live</span>
                 </div>
-                <ul class="list-group list-group-flush">
+                <ul class="list-group list-group-flush px-2">
                     @foreach ($logs as $log)
                         <li class="list-group-item d-flex gap-3 py-3">
-                            <span class="rounded-circle bg-{{ $log['color'] }}-subtle text-{{ $log['color'] }} d-flex align-items-center justify-content-center flex-shrink-0"
-                                  style="width:34px;height:34px">
-                                <i class="fa-solid {{ $log['icon'] }} fa-sm"></i>
-                            </span>
+                            <span class="log-ico"><i class="fa-solid {{ $log['icon'] }} fa-sm"></i></span>
                             <div class="small">
-                                <div>{{ $log['text'] }}</div>
+                                <div class="fw-semibold">{{ $log['text'] }}</div>
                                 <div class="text-muted">{{ $log['time'] }}</div>
                             </div>
                         </li>
                     @endforeach
                 </ul>
-                <div class="card-footer bg-white text-center">
-                    <a href="#" class="small text-decoration-none">Lihat semua log <i class="fa-solid fa-arrow-right fa-xs"></i></a>
-                </div>
             </div>
         </div>
     </div>

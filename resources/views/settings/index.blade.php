@@ -119,7 +119,7 @@
                     <span class="small text-muted">{{ count($logs) }} catatan terakhir</span>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table align-middle mb-0 js-datatable">
                         <thead>
                             <tr>
                                 <th>Waktu</th>
@@ -129,7 +129,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse ($logs as $log)
+                            @foreach ($logs as $log)
                                 @php [$color, $label] = $levelMap[$log['level']] ?? $levelMap['info']; @endphp
                                 <tr>
                                     <td class="text-nowrap text-muted">{{ $log['time'] }}</td>
@@ -141,11 +141,7 @@
                                     <td>{{ $log['source'] }}</td>
                                     <td>{{ $log['message'] }}</td>
                                 </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted py-4">Belum ada log.</td>
-                                </tr>
-                            @endforelse
+                            @endforeach
                         </tbody>
                     </table>
                 </div>

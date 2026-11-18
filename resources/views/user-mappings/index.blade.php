@@ -24,14 +24,10 @@
     <div class="card">
         <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
             <h3 class="h6 fw-bold mb-0"><i class="fa-solid fa-users-gear text-primary me-2"></i>Daftar User Terhubung</h3>
-            <form method="GET" action="{{ route('user-mappings.index') }}" class="input-group input-group-sm" style="max-width:260px">
-                <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
-                <input type="search" name="q" value="{{ $search }}" class="form-control border-start-0" placeholder="Cari user...">
-            </form>
         </div>
 
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
+            <table class="table align-middle mb-0 js-datatable">
                 <thead>
                     <tr>
                         <th>Nama</th>
@@ -39,11 +35,11 @@
                         <th>Telegram Username</th>
                         <th>Chat ID</th>
                         <th>Status</th>
-                        <th class="text-end">Aksi</th>
+                        <th class="text-end no-sort">Aksi</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($mappings as $m)
+                    @foreach ($mappings as $m)
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center gap-2">
@@ -92,30 +88,20 @@
                                 </button>
                             </td>
                         </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-5">
-                                <i class="fa-solid fa-user-slash fa-2x mb-2 d-block"></i>
-                                {{ $search !== '' ? 'Tidak ada data yang cocok.' : 'Belum ada user yang terhubung.' }}
-                            </td>
-                        </tr>
-                    @endforelse
+                    @endforeach
                 </tbody>
             </table>
-        </div>
-
-        <div class="card-footer bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center small text-muted">
-            <span>Menampilkan {{ $mappings->count() }} dari {{ $mappings->total() }} user</span>
-            @if ($mappings->hasPages())
-                {{ $mappings->links('pagination::bootstrap-5') }}
-            @endif
         </div>
     </div>
 
     {{-- ================= MODAL TAMBAH / EDIT ================= --}}
     <div class="modal fade" id="mappingModal" tabindex="-1" aria-labelledby="mappingModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <form class="modal-content" id="mappingForm" action="{{ route('user-mappings.store') }}" method="POST">
+            <form class="modal-content" id="mappingForm" action="{{ route('user-mappings.store') }}" method="POST"
+                  data-store-url="{{ route('user-mappings.store') }}"
+                  data-has-errors="{{ $errors->any() ? '1' : '0' }}"
+                  data-old-mode="{{ old('_mode', 'create') }}"
+                  data-old-action="{{ old('_action') }}">
                 @csrf
                 <input type="hidden" name="_method" id="formMethod" value="POST" disabled>
                 <input type="hidden" name="_mode" id="formMode" value="{{ old('_mode', 'create') }}">
@@ -199,7 +185,7 @@
 @push('scripts')
 <script>
     const form = document.getElementById('mappingForm');
-    const storeUrl = @json(route('user-mappings.store'));
+    const storeUrl = form.dataset.storeUrl;
     const fields = ['name', 'redmine_user_id', 'telegram_username', 'chat_id'];
 
     function setMode(mode, action) {
@@ -219,9 +205,11 @@
         form.elements.is_active.checked = true;
     });
 
-    document.querySelectorAll('.btn-edit').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const d = btn.dataset;
+    // Event delegation: baris di halaman DataTables lain dibuat ulang saat berpindah halaman.
+    document.addEventListener('click', (e) => {
+        const edit = e.target.closest('.btn-edit');
+        if (edit) {
+            const d = edit.dataset;
             setMode('edit', d.action);
             form.querySelectorAll('.alert').forEach(a => a.remove());
             form.elements.name.value = d.name;
@@ -229,20 +217,20 @@
             form.elements.telegram_username.value = d.telegram;
             form.elements.chat_id.value = d.chat;
             form.elements.is_active.checked = d.active === '1';
-        });
-    });
+            return;
+        }
 
-    document.querySelectorAll('.btn-delete').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.getElementById('deleteForm').action = btn.dataset.action;
-            document.getElementById('deleteName').textContent = btn.dataset.name;
-        });
+        const del = e.target.closest('.btn-delete');
+        if (del) {
+            document.getElementById('deleteForm').action = del.dataset.action;
+            document.getElementById('deleteName').textContent = del.dataset.name;
+        }
     });
 
     // Buka kembali modal beserta mode-nya jika validasi gagal
-    @if ($errors->any())
-        setMode(@json(old('_mode', 'create')), @json(old('_action')));
+    if (form.dataset.hasErrors === '1') {
+        setMode(form.dataset.oldMode, form.dataset.oldAction);
         bootstrap.Modal.getOrCreateInstance(document.getElementById('mappingModal')).show();
-    @endif
+    }
 </script>
 @endpush
