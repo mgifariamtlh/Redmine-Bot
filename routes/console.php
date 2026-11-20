@@ -15,11 +15,11 @@ Artisan::command('inspire', function () {
 // Untuk testing lokal (`php artisan schedule:work`), hapus ->when(...) agar jalan tiap menit.
 Schedule::command('deploy:notify-pic')
     ->everyMinute()
-    // ->when(function () {
-    //     try {
-    //         return now()->format('H:i') === Setting::get('cron_schedule_time');
-    //     } catch (Throwable) {
-    //         return false; // DB belum siap; coba lagi menit berikutnya
-    //     }
-    // })
+    ->when(function () {
+        try {
+            return now()->format('H:i') === Setting::get('cron_schedule_time');
+        } catch (Throwable) {
+            return false; // DB belum siap; coba lagi menit berikutnya
+        }
+    })
     ->withoutOverlapping();

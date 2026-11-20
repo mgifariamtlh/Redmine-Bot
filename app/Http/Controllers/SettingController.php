@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Setting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,14 +20,8 @@ class SettingController extends Controller
             'has_bot_token'      => Setting::has('telegram_bot_token'),
         ];
 
-        // Data dummy (belum ada tabel log).
-        $logs = [
-            ['level' => 'success', 'source' => 'Redmine',  'message' => 'Sinkronisasi issue selesai (48 issue)',       'time' => '2026-10-30 15:58'],
-            ['level' => 'info',    'source' => 'Telegram', 'message' => 'Reminder deploy #1063 terkirim ke @rudi_h',   'time' => '2026-10-30 15:45'],
-            ['level' => 'error',   'source' => 'Telegram', 'message' => 'Gagal kirim pesan ke Chat ID 58812345 (403)', 'time' => '2026-10-30 14:10'],
-            ['level' => 'warning', 'source' => 'Redmine',  'message' => 'Custom field "Jam Deploy" kosong pada #1071', 'time' => '2026-10-30 13:02'],
-            ['level' => 'error',   'source' => 'Redmine',  'message' => 'Timeout saat memanggil /issues.json',         'time' => '2026-10-30 09:30'],
-        ];
+        // 500 aktivitas terakhir; search, sort, dan pagination ditangani DataTables.
+        $logs = ActivityLog::with('user:id,name')->latest('id')->limit(500)->get();
 
         return view('settings.index', compact('settings', 'logs'));
     }
@@ -40,15 +35,31 @@ class SettingController extends Controller
             'cron_schedule_time' => ['required', 'date_format:H:i'],
         ]);
 
-        Setting::set('redmine_base_url', rtrim($data['redmine_base_url'], '/'));
+        $baseUrl = rtrim($data['redmine_base_url'], '/');
+        $changes = [];
+
+        if ($baseUrl !== Setting::get('redmine_base_url')) {
+            $changes[] = 'Redmine Base URL';
+        }
+        if ($data['cron_schedule_time'] !== Setting::get('cron_schedule_time')) {
+            $changes[] = "Jam Scheduler ({$data['cron_schedule_time']})";
+        }
+
+        Setting::set('redmine_base_url', $baseUrl);
         Setting::set('cron_schedule_time', $data['cron_schedule_time']);
 
         // Kolom kredensial yang dikosongkan berarti "jangan diubah".
+        $secretLabels = ['redmine_api_key' => 'Redmine API Key', 'telegram_bot_token' => 'Telegram Bot Token'];
         foreach (Setting::SECRET_KEYS as $key) {
             if (filled($data[$key] ?? null)) {
                 Setting::set($key, $data[$key]);
+                $changes[] = $secretLabels[$key] ?? $key; // nilai kredensial tidak pernah dicatat
             }
         }
+
+        ActivityLog::info('Settings', $changes
+            ? 'Pengaturan disimpan. Diubah: '.implode(', ', $changes).'.'
+            : 'Pengaturan disimpan (tidak ada perubahan).');
 
         return redirect()->route('settings.index')->with('success', 'Pengaturan berhasil disimpan.');
     }

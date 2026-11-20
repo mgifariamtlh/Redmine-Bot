@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ActivityLog;
 use App\Models\Deployment;
 use App\Models\Setting;
 use App\Models\TelegramMapping;
+use App\Services\DeploymentSyncService;
 use App\Services\TelegramService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -13,15 +15,31 @@ use Throwable;
 
 class DeployNotifyPic extends Command
 {
-    protected $signature = 'deploy:notify-pic {--dry-run : Tampilkan pesan di terminal tanpa mengirim ke Telegram}';
+    protected $signature = 'deploy:notify-pic {--dry-run : Tampilkan pesan di terminal tanpa mengirim ke Telegram} {--no-sync : Lewati sinkronisasi Redmine, pakai data lokal apa adanya}';
 
     protected $description = 'Kirim pengingat task Test Passed yang belum di-deploy ke masing-masing PIC via Telegram';
 
     private const DEFAULT_BASE_URL = 'https://redmine.recis.co.id';
 
-    public function handle(TelegramService $telegram): int
+    public function handle(TelegramService $telegram, DeploymentSyncService $syncService): int
     {
         $dryRun = (bool) $this->option('dry-run');
+
+        // Sync dulu agar pengingat memakai data terbaru dari Redmine. Bila gagal, tetap kirim
+        // memakai data lokal terakhir (pengingat basi lebih baik daripada tidak ada).
+        if (! $this->option('no-sync')) {
+            try {
+                $result = $syncService->sync();
+                $this->info("Sync Redmine selesai: {$result['fetched']} data diperbarui, {$result['deleted']} data closed dihapus.");
+
+                if ($result['close_check_error'] !== null) {
+                    $this->warn("Pengecekan status Closed gagal: {$result['close_check_error']}");
+                }
+            } catch (Throwable $e) {
+                $this->warn("Sync Redmine gagal, memakai data lokal terakhir: {$e->getMessage()}");
+                ActivityLog::warning('Scheduler', 'Sync sebelum pengingat gagal, memakai data lokal terakhir.');
+            }
+        }
         $baseUrl = rtrim((string) (Setting::get('redmine_base_url') ?: self::DEFAULT_BASE_URL), '/');
 
         $groups = Deployment::where('status', 'test-passed')
@@ -49,6 +67,9 @@ class DeployNotifyPic extends Command
 
             if (! $mapping) {
                 $this->warn("Lewati Redmine user {$userId}: tidak ada mapping Telegram aktif ({$tasks->count()} task).");
+                if (! $dryRun) {
+                    ActivityLog::warning('Scheduler', "Pengingat dilewati: Redmine user {$userId} tidak punya mapping Telegram aktif ({$tasks->count()} task).");
+                }
 
                 continue;
             }
@@ -65,11 +86,18 @@ class DeployNotifyPic extends Command
             try {
                 $telegram->sendMessage((string) $mapping->chat_id, $message, 'HTML');
                 $sent++;
+                ActivityLog::success('Telegram', "Pengingat deploy ({$tasks->count()} task) terkirim ke {$mapping->name}.");
             } catch (Throwable $e) {
                 // Satu PIC gagal tidak boleh menghentikan pengiriman ke PIC lain.
                 $failed++;
                 $this->error("Gagal kirim ke {$mapping->name}: {$e->getMessage()}");
+                ActivityLog::error('Telegram', "Gagal kirim pengingat ke {$mapping->name}: {$e->getMessage()}");
             }
+        }
+
+        if (! $dryRun) {
+            $level = $failed > 0 ? 'warning' : 'success';
+            ActivityLog::record($level, 'Scheduler', "Pengingat deploy selesai. Terkirim: {$sent}, gagal: {$failed}.");
         }
 
         $this->info("Selesai. Terkirim: {$sent}, gagal: {$failed}.");

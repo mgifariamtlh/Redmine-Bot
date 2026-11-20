@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Deployment;
 use App\Models\Setting;
 use App\Models\TelegramMapping;
@@ -45,13 +46,18 @@ class TelegramBotController extends Controller
         $mapping = TelegramMapping::where('chat_id', (string) $chatId)->first();
 
         if (! $mapping || ! $mapping->is_active) {
+            ActivityLog::warning('Telegram', "Pesan ditolak dari Chat ID {$chatId}: akun belum terdaftar atau nonaktif.");
+
             $this->sendMessage($chatId, "⛔ Akun Anda belum terdaftar atau tidak aktif.\n"
                 ."Berikan Chat ID Anda ke admin: `{$chatId}`");
 
             return $this->ok();
         }
 
-        $this->sendMessage($chatId, $this->reply($this->normalize($text), $mapping));
+        $command = $this->normalize($text);
+        ActivityLog::info('Telegram', "{$mapping->name} memakai perintah \"".Str::limit($command, 40).'".');
+
+        $this->sendMessage($chatId, $this->reply($command, $mapping));
 
         return $this->ok();
     }
@@ -76,6 +82,7 @@ class TelegramBotController extends Controller
         } catch (RuntimeException|ConnectionException $e) {
             // Detail error hanya ke log; pengguna cukup tahu Redmine sedang bermasalah.
             Log::warning('Telegram bot: gagal mengambil data Redmine', ['error' => $e->getMessage()]);
+            ActivityLog::error('Redmine', "Bot gagal mengambil data untuk {$mapping->name}: {$e->getMessage()}");
 
             return '⚠️ Redmine tidak dapat dihubungi saat ini. Coba lagi beberapa saat lagi.';
         }
@@ -181,6 +188,7 @@ class TelegramBotController extends Controller
         } catch (RuntimeException|ConnectionException $e) {
             // Tetap balas 200 ke Telegram agar update tidak dikirim ulang terus-menerus.
             Log::warning('Telegram bot: gagal mengirim balasan', ['chat_id' => $chatId, 'error' => $e->getMessage()]);
+            ActivityLog::error('Telegram', "Gagal membalas Chat ID {$chatId}: {$e->getMessage()}");
         }
     }
 

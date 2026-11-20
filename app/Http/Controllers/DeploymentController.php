@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Deployment;
 use App\Models\Setting;
-use App\Models\TelegramMapping;
-use App\Services\RedmineService;
+use App\Services\DeploymentSyncService;
 use App\Services\TelegramService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -38,54 +37,25 @@ class DeploymentController extends Controller
         ]);
     }
 
-    public function sync(RedmineService $redmine): RedirectResponse
+    public function sync(DeploymentSyncService $syncService): RedirectResponse
     {
         // Beberapa request x timeout HTTP bisa melewati batas PHP (60 dtk di XAMPP); beri ruang agar
         // yang tertangkap adalah timeout HTTP (pesan rapi), bukan fatal error PHP.
         set_time_limit(300);
 
         try {
-            $issues = $redmine->fetchDeployments();
+            $result = $syncService->sync();
         } catch (RuntimeException|ConnectionException $e) {
             return back()->with('error', 'Sinkronisasi gagal: '.$e->getMessage());
         }
 
-        // Nama PIC diprioritaskan dari telegram_mappings (cocok lewat redmine_user_id).
-        $names = TelegramMapping::pluck('name', 'redmine_user_id');
-
-        DB::transaction(function () use ($issues, $names) {
-            foreach ($issues as $row) {
-                $row['pic_name'] = $names[(string) $row['redmine_user_id']] ?? $row['pic_name'];
-
-                Deployment::updateOrCreate(['issue_id' => $row['issue_id']], $row);
-            }
-        });
-
-        // Hapus data lokal yang di Redmine sudah Closed. Hanya record lokal yang TIDAK ikut
-        // ditarik di atas yang dicek (yang ditarik pasti Test Passed / Deployed), sehingga
-        // data di luar rentang tanggal / batas limit tidak terhapus hanya karena tak terambil.
-        $fetchedIds = collect($issues)->pluck('issue_id');
-        $localIds = Deployment::whereNotIn('issue_id', $fetchedIds)->pluck('issue_id')->all();
-
-        try {
-            $closedIds = $redmine->fetchClosedIssueIds($localIds);
-        } catch (RuntimeException|ConnectionException $e) {
-            // Data sudah tersimpan; hanya pembersihan yang gagal.
-            Setting::set('last_sync_at', now()->toDateTimeString());
-
-            return back()->with('error', 'Data diperbarui ('.count($issues).' task), tetapi pengecekan status Closed gagal: '.$e->getMessage());
+        if ($result['close_check_error'] !== null) {
+            return back()->with('error', 'Data diperbarui ('.$result['fetched'].' task), tetapi pengecekan status Closed gagal: '.$result['close_check_error']);
         }
 
-        $deleted = $closedIds ? Deployment::whereIn('issue_id', $closedIds)->delete() : 0;
-
-        Setting::set('last_sync_at', now()->toDateTimeString());
-
-        $unmapped = collect($issues)->pluck('redmine_user_id')->filter()->unique()
-            ->reject(fn ($id) => isset($names[(string) $id]))->count();
-
-        $message = 'Sync selesai: '.count($issues)." data diperbarui, {$deleted} data closed dihapus.";
-        if ($unmapped > 0) {
-            $message .= " {$unmapped} PIC belum punya User Mapping Telegram.";
+        $message = 'Sync selesai: '.$result['fetched']." data diperbarui, {$result['deleted']} data closed dihapus.";
+        if ($result['unmapped'] > 0) {
+            $message .= " {$result['unmapped']} PIC belum punya User Mapping Telegram.";
         }
 
         return back()->with('success', $message);
@@ -96,6 +66,8 @@ class DeploymentController extends Controller
         $mapping = $deployment->mapping;
 
         if (! $mapping || ! $mapping->is_active) {
+            ActivityLog::warning('Jadwal Deploy', "Reminder #{$deployment->issue_id} dilewati: PIC belum punya mapping Telegram aktif.");
+
             return back()->with('error', 'PIC belum punya User Mapping Telegram yang aktif.');
         }
 
@@ -107,8 +79,12 @@ class DeploymentController extends Controller
         try {
             $telegram->sendMessage($mapping->chat_id, $text);
         } catch (RuntimeException|ConnectionException $e) {
+            ActivityLog::error('Telegram', "Gagal kirim reminder #{$deployment->issue_id} ke {$mapping->name}: {$e->getMessage()}");
+
             return back()->with('error', $e->getMessage());
         }
+
+        ActivityLog::success('Telegram', "Reminder deploy #{$deployment->issue_id} dikirim manual ke {$mapping->name}.");
 
         return back()->with('success', "Reminder #{$deployment->issue_id} dikirim ke {$mapping->name}.");
     }

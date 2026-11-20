@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\TelegramMapping;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,8 @@ class TelegramMappingController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        TelegramMapping::create($this->validated($request));
+        $mapping = TelegramMapping::create($this->validated($request));
+        ActivityLog::success('User Mapping', "Mapping {$mapping->name} (Redmine ID {$mapping->redmine_user_id}) ditambahkan.");
 
         return redirect()->route('user-mappings.index')->with('success', 'Mapping berhasil ditambahkan.');
     }
@@ -28,6 +30,8 @@ class TelegramMappingController extends Controller
     public function update(Request $request, TelegramMapping $userMapping): RedirectResponse
     {
         $userMapping->update($this->validated($request, $userMapping));
+        ActivityLog::info('User Mapping', "Mapping {$userMapping->name} (Redmine ID {$userMapping->redmine_user_id}) diperbarui"
+            .($userMapping->is_active ? '.' : ' (nonaktif).'));
 
         return redirect()->route('user-mappings.index')->with('success', 'Mapping berhasil diperbarui.');
     }
@@ -35,6 +39,7 @@ class TelegramMappingController extends Controller
     public function destroy(TelegramMapping $userMapping): RedirectResponse
     {
         $userMapping->delete();
+        ActivityLog::warning('User Mapping', "Mapping {$userMapping->name} (Redmine ID {$userMapping->redmine_user_id}) dihapus.");
 
         return redirect()->route('user-mappings.index')->with('success', 'Mapping berhasil dihapus.');
     }
