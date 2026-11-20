@@ -119,27 +119,29 @@
                     <span class="small text-muted">{{ count($logs) }} catatan terakhir</span>
                 </div>
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 js-datatable">
+                    <table class="table align-middle mb-0 js-datatable" data-order='[[0, "desc"]]'>
                         <thead>
                             <tr>
                                 <th>Waktu</th>
                                 <th>Level</th>
                                 <th>Sumber</th>
+                                <th>Pengguna</th>
                                 <th>Pesan</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach ($logs as $log)
-                                @php [$color, $label] = $levelMap[$log['level']] ?? $levelMap['info']; @endphp
+                                @php [$color, $label] = $levelMap[$log->level] ?? $levelMap['info']; @endphp
                                 <tr>
-                                    <td class="text-nowrap text-muted">{{ $log['time'] }}</td>
+                                    <td class="text-nowrap text-muted" data-order="{{ $log->created_at->format('Y-m-d H:i:s') }}-{{ str_pad($log->id, 10, '0', STR_PAD_LEFT) }}">{{ $log->created_at->format('d M Y H:i:s') }}</td>
                                     <td>
                                         <span class="badge rounded-pill bg-{{ $color }}-subtle text-{{ $color }}-emphasis border border-{{ $color }}-subtle">
                                             {{ $label }}
                                         </span>
                                     </td>
-                                    <td>{{ $log['source'] }}</td>
-                                    <td>{{ $log['message'] }}</td>
+                                    <td>{{ $log->source }}</td>
+                                    <td class="text-nowrap">{{ $log->user?->name ?? 'Sistem' }}</td>
+                                    <td>{{ $log->message }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
