@@ -3,13 +3,15 @@
 @section('title', 'Dashboard')
 
 @php
-    $statusOrder = ['Scheduled', 'In Progress', 'Done', 'Failed'];
-    $deployCollection = collect($deploys);
-    $statusCounts = collect($statusOrder)->mapWithKeys(
-        fn ($s) => [$s => $deployCollection->where('status', $s)->count()]
-    );
-    $maxCount = max($statusCounts->max(), 1);
-    $pct = round($stats['tasks_done'] / max($stats['tasks_today'], 1) * 100);
+    $maxCount = max($week->max('total'), 1);
+    $pct = (int) round($stats['tasks_done'] / max($stats['tasks_today'], 1) * 100);
+    $statusLabel = ['test-passed' => 'Test Passed', 'deployed' => 'Deployed'];
+    $logStyle = [
+        'success' => 'fa-circle-check',
+        'info'    => 'fa-circle-info',
+        'warning' => 'fa-triangle-exclamation',
+        'error'   => 'fa-circle-xmark',
+    ];
 @endphp
 
 @push('styles')
@@ -34,14 +36,27 @@
 @endpush
 
 @section('content')
+    @foreach (['success' => 'alert-success', 'error' => 'alert-danger'] as $flash => $cls)
+        @if (session($flash))
+            <div class="alert {{ $cls }} alert-dismissible fade show" role="alert">
+                {{ session($flash) }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+            </div>
+        @endif
+    @endforeach
+
     {{-- ================= QUICK STATS ================= --}}
     <div class="row g-3 mb-4 align-items-stretch">
         <div class="col-12 col-xl-3 d-flex flex-column justify-content-center pe-xl-4 mb-2 mb-xl-0">
             <h2 class="h4 page-title mb-2">Quick Stats</h2>
             <p class="text-muted mb-3">Ringkasan aktivitas bot hari ini, {{ now()->translatedFormat('l, d F Y') }}</p>
-            <div>
-                <button class="btn btn-dark btn-sm"><i class="fa-solid fa-rotate me-1"></i> Sinkronisasi Redmine</button>
-            </div>
+            <form action="{{ route('deployments.sync') }}" method="POST">
+                @csrf
+                <button type="submit" class="btn btn-dark btn-sm"><i class="fa-solid fa-rotate me-1"></i> Sinkronisasi Redmine</button>
+            </form>
+            <small class="text-muted d-block mt-2">
+                Sync terakhir: {{ $stats['last_sync'] ? \Illuminate\Support\Carbon::parse($stats['last_sync'])->diffForHumans() : 'belum pernah' }}
+            </small>
         </div>
 
         <div class="col-12 col-xl-9">
@@ -49,8 +64,8 @@
                 <div class="col">
                     <div class="stat-tile">
                         <div class="stat-ico"><i class="fa-solid fa-user"></i></div>
-                        <div class="stat-val">{{ $stats['total_users'] }}</div>
-                        <div class="stat-lbl">User Terhubung</div>
+                        <div class="stat-val">{{ $stats['active_users'] }}<small class="text-muted fw-semibold fs-6"> / {{ $stats['total_users'] }}</small></div>
+                        <div class="stat-lbl">User Aktif</div>
                     </div>
                 </div>
                 <div class="col">
@@ -65,20 +80,20 @@
                     <div class="stat-tile">
                         <div class="stat-ico"><i class="fa-solid fa-list-check"></i></div>
                         <div class="stat-val">{{ $stats['tasks_done'] }}<small class="text-muted fw-semibold fs-6"> / {{ $stats['tasks_today'] }}</small></div>
-                        <div class="stat-lbl">Task Selesai</div>
+                        <div class="stat-lbl">Sudah Deployed</div>
                     </div>
                 </div>
                 <div class="col">
                     <div class="stat-tile">
                         <div class="stat-ico"><i class="fa-solid fa-diagram-project"></i></div>
-                        <div class="stat-val">{{ $stats['redmine'] ? 'Online' : 'Offline' }}</div>
+                        <div class="stat-val">{{ $stats['redmine'] ? 'Siap' : 'Belum diatur' }}</div>
                         <div class="stat-lbl">Redmine API</div>
                     </div>
                 </div>
                 <div class="col">
                     <div class="stat-tile">
                         <div class="stat-ico"><i class="fa-brands fa-telegram"></i></div>
-                        <div class="stat-val">{{ $stats['telegram'] ? 'Online' : 'Offline' }}</div>
+                        <div class="stat-val">{{ $stats['telegram'] ? 'Siap' : 'Belum diatur' }}</div>
                         <div class="stat-lbl">Telegram Bot</div>
                     </div>
                 </div>
@@ -91,27 +106,27 @@
         <div class="col-12 col-xl-8">
             <div class="card h-100">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <h3 class="mb-0">Statistics</h3>
+                    <h3 class="mb-0">Jadwal Deploy Minggu Ini</h3>
                     <div class="small text-muted">
-                        <span class="me-3"><span class="legend-dot" style="background:#0b0b0b"></span>Jumlah task</span>
-                        <span><span class="legend-dot" style="background:#d4d4d4"></span>Maksimum</span>
+                        <span class="me-3"><span class="legend-dot" style="background:#0b0b0b"></span>Total jadwal</span>
+                        <span><span class="legend-dot" style="background:#d4d4d4"></span>Sudah deployed</span>
                     </div>
                 </div>
                 <div class="card-body">
                     <div class="chart-bars">
-                        @foreach ($statusCounts as $label => $count)
+                        @foreach ($week as $day)
                             <div class="chart-col">
-                                @if ($count > 0)<span class="chart-val">{{ $count }}</span>@endif
+                                @if ($day['total'] > 0)<span class="chart-val">{{ $day['total'] }}</span>@endif
                                 <div class="chart-pair">
-                                    <div class="chart-bar" @style(['height: ' . max($count / $maxCount * 100, 4) . '%'])></div>
-                                    <div class="chart-bar light" style="height: 100%"></div>
+                                    <div class="chart-bar" @style(['height: ' . max($day['total'] / $maxCount * 100, 4) . '%'])></div>
+                                    <div class="chart-bar light" @style(['height: ' . max($day['deployed'] / $maxCount * 100, 4) . '%'])></div>
                                 </div>
                             </div>
                         @endforeach
                     </div>
                     <div class="chart-lbl">
-                        @foreach ($statusCounts as $label => $count)
-                            <span>{{ $label }}</span>
+                        @foreach ($week as $day)
+                            <span @class(['fw-bold text-dark' => $day['today']])>{{ $day['label'] }}</span>
                         @endforeach
                     </div>
                 </div>
@@ -129,25 +144,33 @@
                         <span class="conn-logo"><i class="fa-solid fa-diagram-project"></i></span>
                         <div class="lh-sm">
                             <div class="fw-bold">Redmine API</div>
-                            <small class="text-muted">Integrasi task</small>
+                            <small class="text-muted">API Key {{ $stats['redmine'] ? 'tersimpan' : 'belum diisi' }}</small>
                         </div>
-                        <span class="conn-tag {{ $stats['redmine'] ? '' : 'off' }}">{{ $stats['redmine'] ? 'Online' : 'Offline' }}</span>
+                        <span class="conn-tag {{ $stats['redmine'] ? '' : 'off' }}">{{ $stats['redmine'] ? 'Siap' : 'Belum diatur' }}</span>
                     </div>
                     <div class="conn-item">
                         <span class="conn-logo"><i class="fa-brands fa-telegram"></i></span>
                         <div class="lh-sm">
                             <div class="fw-bold">Telegram Bot</div>
-                            <small class="text-muted">Notifikasi reminder</small>
+                            <small class="text-muted">Token {{ $stats['telegram'] ? 'tersimpan' : 'belum diisi' }}</small>
                         </div>
-                        <span class="conn-tag {{ $stats['telegram'] ? '' : 'off' }}">{{ $stats['telegram'] ? 'Online' : 'Offline' }}</span>
+                        <span class="conn-tag {{ $stats['telegram'] ? '' : 'off' }}">{{ $stats['telegram'] ? 'Siap' : 'Belum diatur' }}</span>
                     </div>
                     <div class="conn-item">
                         <span class="conn-logo"><i class="fa-solid fa-user-plus"></i></span>
                         <div class="lh-sm">
                             <div class="fw-bold">User Baru</div>
-                            <small class="text-muted">Minggu ini</small>
+                            <small class="text-muted">Mapping minggu ini</small>
                         </div>
                         <span class="conn-tag">+{{ $stats['new_users'] }}</span>
+                    </div>
+                    <div class="conn-item">
+                        <span class="conn-logo"><i class="fa-solid fa-hourglass-half"></i></span>
+                        <div class="lh-sm">
+                            <div class="fw-bold">Belum Deploy</div>
+                            <small class="text-muted">Status Test Passed</small>
+                        </div>
+                        <span class="conn-tag">{{ $stats['pending_total'] }}</span>
                     </div>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between small mb-1">
@@ -183,16 +206,16 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($deploys as $deploy)
+                            @foreach ($deploysToday as $deploy)
                                 <tr>
                                     <td class="text-center text-muted">{{ $loop->iteration }}</td>
-                                    <td><a href="#" class="fw-semibold text-decoration-none">#{{ $deploy['issue_id'] }}</a></td>
-                                    <td>{{ $deploy['task'] }}</td>
-                                    <td class="text-nowrap"><i class="fa-regular fa-clock text-muted me-1"></i>{{ $deploy['time'] }}</td>
-                                    <td class="text-nowrap">{{ $deploy['pic'] }}</td>
+                                    <td><a href="{{ $deploy->url }}" target="_blank" rel="noopener" class="fw-semibold text-decoration-none">#{{ $deploy->issue_id }}</a></td>
+                                    <td>{{ $deploy->subject }}</td>
+                                    <td class="text-nowrap"><i class="fa-regular fa-clock text-muted me-1"></i>{{ $deploy->deploy_time ?: '-' }}</td>
+                                    <td class="text-nowrap">{{ $deploy->mapping?->name ?? $deploy->pic_name ?? '-' }}</td>
                                     <td>
-                                        <span class="badge rounded-pill {{ $deploy['status'] === 'Failed' ? 'bg-danger-subtle' : ($deploy['status'] === 'Done' ? 'bg-success' : 'bg-secondary') }}">
-                                            {{ $deploy['status'] }}
+                                        <span class="badge rounded-pill {{ $deploy->status === 'deployed' ? 'bg-success' : 'bg-secondary' }}">
+                                            {{ $statusLabel[$deploy->status] ?? $deploy->status }}
                                         </span>
                                     </td>
                                 </tr>
@@ -206,19 +229,21 @@
         <div class="col-12 col-xl-4">
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="mb-0">Log Aktivitas Bot</h3>
-                    <span class="badge rounded-pill bg-secondary">Live</span>
+                    <h3 class="mb-0">Log Aktivitas</h3>
+                    <a href="{{ route('settings.index') }}" class="btn btn-outline-primary btn-sm">Lihat Semua</a>
                 </div>
                 <ul class="list-group list-group-flush px-2">
-                    @foreach ($logs as $log)
+                    @forelse ($logs as $log)
                         <li class="list-group-item d-flex gap-3 py-3">
-                            <span class="log-ico"><i class="fa-solid {{ $log['icon'] }} fa-sm"></i></span>
+                            <span class="log-ico"><i class="fa-solid {{ $logStyle[$log->level] ?? 'fa-circle-info' }} fa-sm"></i></span>
                             <div class="small">
-                                <div class="fw-semibold">{{ $log['text'] }}</div>
-                                <div class="text-muted">{{ $log['time'] }}</div>
+                                <div class="fw-semibold">{{ $log->message }}</div>
+                                <div class="text-muted">{{ $log->source }} &middot; {{ $log->created_at->diffForHumans() }}</div>
                             </div>
                         </li>
-                    @endforeach
+                    @empty
+                        <li class="list-group-item text-center text-muted py-4">Belum ada aktivitas.</li>
+                    @endforelse
                 </ul>
             </div>
         </div>

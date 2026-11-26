@@ -11,6 +11,17 @@
     ];
 @endphp
 
+@push('styles')
+<style>
+    /* Warna badge level log; !important untuk menimpa aturan badge abu-abu di layout. */
+    .badge.log-badge { border: 1px solid transparent !important; }
+    .badge.log-success { background: #d9f2e1 !important; color: #14632b !important; border-color: #b6e4c5 !important; }
+    .badge.log-info    { background: #dbeafe !important; color: #1d4ed8 !important; border-color: #bfdbfe !important; }
+    .badge.log-warning { background: #fef3c7 !important; color: #92600a !important; border-color: #fde68a !important; }
+    .badge.log-error   { background: #fde0de !important; color: #b3261e !important; border-color: #f8bcb8 !important; }
+</style>
+@endpush
+
 @section('content')
     <div class="mb-4">
         <h2 class="h4 fw-bold mb-1">Settings</h2>
@@ -131,11 +142,11 @@
                         </thead>
                         <tbody>
                             @foreach ($logs as $log)
-                                @php [$color, $label] = $levelMap[$log->level] ?? $levelMap['info']; @endphp
+                                @php $label = $levelMap[$log->level][1] ?? 'Info'; @endphp
                                 <tr>
                                     <td class="text-nowrap text-muted" data-order="{{ $log->created_at->format('Y-m-d H:i:s') }}-{{ str_pad($log->id, 10, '0', STR_PAD_LEFT) }}">{{ $log->created_at->format('d M Y H:i:s') }}</td>
                                     <td>
-                                        <span class="badge rounded-pill bg-{{ $color }}-subtle text-{{ $color }}-emphasis border border-{{ $color }}-subtle">
+                                        <span class="badge rounded-pill log-badge log-{{ $log->level }}">
                                             {{ $label }}
                                         </span>
                                     </td>
